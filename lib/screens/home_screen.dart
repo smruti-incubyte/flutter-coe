@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'battery_screen.dart';
 import 'hero_screen.dart';
 import 'animation_screen.dart';
+import 'custom_painter_screen.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -57,6 +58,20 @@ class HomeScreen extends StatelessWidget {
                 Navigator.push(
                   context,
                   _rotationTransition(const AnimationScreen()),
+                );
+              },
+            ),
+            const SizedBox(height: 16),
+            _buildDemoCard(
+              context,
+              title: 'Custom Painter',
+              description: 'Custom Drawing Demo',
+              icon: Icons.brush,
+              color: Colors.purple,
+              onTap: () {
+                Navigator.push(
+                  context,
+                  _scaleAndFadeTransition(const CustomPainterScreen()),
                 );
               },
             ),
