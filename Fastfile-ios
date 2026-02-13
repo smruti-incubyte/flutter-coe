@@ -1,0 +1,70 @@
+default_platform(:android)
+platform :android do
+  desc "Build and upload app to Google Play Internal Testing"
+  lane :internal do
+    sh "flutter build appbundle -t lib/main_production.dart --flavor production"
+    upload_to_play_store(
+      track: "internal",
+      aab: "../build/app/outputs/bundle/productionRelease/app-production-release.aab",
+      json_key: "fastlane/playstore.json",
+      package_name: "com.goodvets",
+      release_status: "completed",
+      skip_upload_metadata: true,
+      skip_upload_changelogs: true,
+      skip_upload_images: true,
+      skip_upload_screenshots: true
+    )
+  end
+
+  desc "Build and upload staging app to Firebase App Distribution"
+  lane :beta_staging do
+    sh "cd .. && flutter build apk --flavor staging --target lib/main_staging.dart --release"
+
+    # Use the APK path to distribute
+    firebase_app_distribution(
+      app: "1:141847416233:android:e8c1dd7c950f6e59af48b8",
+      apk_path: "../build/app/outputs/flutter-apk/app-staging-release.apk",
+      release_notes: "Bug fixes and improvements",
+      testers: "babureddy.k@pangeatech.net",
+      firebase_cli_token: ENV["FIREBASE_TOKEN"]
+    )
+  end
+
+  desc "Only check the version against Play Store without building"
+  lane :verify_version_only do
+    # Get current build from pubspec
+    pubspec_path = File.expand_path(File.join('..', '..', 'pubspec.yaml'), __dir__)
+    UI.message("Looking for pubspec at: #{pubspec_path}")
+
+    if File.exist?(pubspec_path)
+      pubspec_content = File.read(pubspec_path)
+      version_line = pubspec_content.match(/^version:\s*(.+)$/)
+
+      if version_line
+        version_string = version_line[1].strip
+        version_name = version_string.split('+').first
+        version_code = version_string.split('+').last.to_i
+        UI.message("Current version: #{version_name} (#{version_code})")
+
+        # Get Play Store version
+        latest_version_code = google_play_track_version_codes(
+          package_name: "com.goodvets",
+          track: "production",
+          json_key: "fastlane/playstore.json"
+        ).first.to_i
+
+        UI.message("Latest Play Store version code: #{latest_version_code}")
+
+        if version_code <= latest_version_code
+          UI.user_error!("ERROR: Current version code (#{version_code}) must be higher than the latest Play Store version (#{latest_version_code})")
+        else
+          UI.success("Version check passed: #{version_code} > #{latest_version_code}")
+        end
+      else
+        UI.user_error!("Could not find version in pubspec.yaml")
+      end
+    else
+      UI.user_error!("Could not find pubspec.yaml at path: #{pubspec_path}")
+    end
+  end
+end

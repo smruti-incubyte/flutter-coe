@@ -1,0 +1,305 @@
+# This file contains the fastlane.tools configuration
+# You can find the documentation at https://docs.fastlane.tools
+#
+# For a list of all available actions, check out
+#
+#     https://docs.fastlane.tools/actions
+#
+# For a list of all available plugins, check out
+#
+#     https://docs.fastlane.tools/plugins/available-plugins
+#
+
+# Uncomment the line if you want fastlane to automatically update itself
+# update_fastlane
+
+default_platform(:ios)
+
+desc "Only check the version against TestFlight without building"
+lane :verify_version_only do |options|
+  app_id = options[:app_identifier] || "com.goodvets.staging.web"
+
+  latest_build = latest_testflight_build_number(
+    api_key_path: "fastlane/store.json",
+    app_identifier: app_id
+  )
+
+  UI.message("Latest TestFlight build number: #{latest_build}")
+
+  # Get current build from pubspec
+  pubspec_path = File.expand_path(File.join('..', '..', 'pubspec.yaml'), __dir__)
+  UI.message("Looking for pubspec at: #{pubspec_path}")
+
+  if File.exist?(pubspec_path)
+    pubspec_content = File.read(pubspec_path)
+    version_line = pubspec_content.match(/^version:\s*(.+)$/)
+
+    if version_line
+      version_string = version_line[1].strip
+      current_build = version_string.split('+').last.to_i
+      UI.message("Current build number from pubspec: #{current_build}")
+
+      if current_build <= latest_build.to_i
+        UI.user_error!("ERROR: Current build number (#{current_build}) must be higher than the latest TestFlight build (#{latest_build})")
+      else
+        UI.success("Version check passed: #{current_build} > #{latest_build}")
+      end
+    else
+      UI.user_error!("Could not find version in pubspec.yaml")
+    end
+  else
+    UI.user_error!("Could not find pubspec.yaml at path: #{pubspec_path}")
+  end
+end
+
+platform :ios do
+  desc "Push a new dev build to TestFlight"
+  lane :beta_dev do
+    setup_ci if ENV["CI"]
+    # xcodes(version: "16.2")
+    match(type: "appstore")
+    
+    # Explicitly set code signing settings for main app and extension
+    update_code_signing_settings(
+      use_automatic_signing: false,
+      path: "Runner.xcodeproj",
+      team_id: "625VSFTYM5",
+      bundle_identifier: "net.goodvets.dev",
+      profile_name: "match AppStore net.goodvets.dev",
+      code_sign_identity: "Apple Distribution"
+    )
+    
+    update_code_signing_settings(
+      use_automatic_signing: false,
+      path: "Runner.xcodeproj",
+      team_id: "625VSFTYM5",
+      bundle_identifier: "com.goodvets.ImageNotification",
+      profile_name: "match AppStore com.goodvets.ImageNotification",
+      code_sign_identity: "Apple Distribution",
+      targets: ["ImageNotification"]
+    )
+    
+    build_app(
+      workspace: "Runner.xcworkspace",
+      scheme: "developement",
+      export_options: {
+        provisioningProfiles: {
+          "net.goodvets.dev" => "match AppStore net.goodvets.dev", # Runner target
+          "com.goodvets.ImageNotification" => "match AppStore com.goodvets.ImageNotification" # ImageNotification target
+        }
+      },
+      verbose: true,
+      xcargs: "-allowProvisioningUpdates"
+    )
+    
+    upload_to_testflight(
+      skip_waiting_for_build_processing: true,
+      api_key_path: "fastlane/store.json",
+      # uses_non_exempt_encryption: true
+    )
+  end
+end
+
+platform :ios do
+  desc "Push a new staging build to TestFlight"
+  lane :beta_staging do
+    setup_ci if ENV["CI"]
+    match(type: "appstore")
+    
+    # Explicitly set code signing settings for main app and extension
+    update_code_signing_settings(
+      use_automatic_signing: false,
+      path: "Runner.xcodeproj",
+      team_id: "625VSFTYM5",
+      bundle_identifier: "com.goodvets.staging.web",
+      profile_name: "match AppStore com.goodvets.staging.web",
+      code_sign_identity: "Apple Distribution"
+    )
+    
+    update_code_signing_settings(
+      use_automatic_signing: false,
+      path: "Runner.xcodeproj",
+      team_id: "625VSFTYM5",
+      bundle_identifier: "com.goodvets.ImageNotification",
+      profile_name: "match AppStore com.goodvets.ImageNotification",
+      code_sign_identity: "Apple Distribution",
+      targets: ["ImageNotification"]
+    )
+    
+    build_app(
+      workspace: "Runner.xcworkspace",
+      scheme: "staging",
+      export_options: {
+        provisioningProfiles: {
+          "com.goodvets.staging.web" => "match AppStore com.goodvets.staging.web", 
+          "com.goodvets.ImageNotification" => "match AppStore com.goodvets.ImageNotification"
+        }
+      },
+      verbose: true,
+      xcargs: "-allowProvisioningUpdates"
+    )
+    
+    upload_to_testflight(
+      skip_waiting_for_build_processing: true,
+      api_key_path: "fastlane/store.json",
+    )
+  end
+end
+
+platform :ios do
+  desc "Push a new prod build to TestFlight"
+  lane :beta_prod do
+    setup_ci if ENV["CI"]
+    match(type: "appstore")
+    
+    # Explicitly set code signing settings for main app and extension
+    update_code_signing_settings(
+      use_automatic_signing: false,
+      path: "Runner.xcodeproj",
+      team_id: "625VSFTYM5",
+      bundle_identifier: "com.goodvets",
+      profile_name: "match AppStore com.goodvets",
+      code_sign_identity: "Apple Distribution"
+    )
+    
+    update_code_signing_settings(
+      use_automatic_signing: false,
+      path: "Runner.xcodeproj",
+      team_id: "625VSFTYM5",
+      bundle_identifier: "com.goodvets.ImageNotification",
+      profile_name: "match AppStore com.goodvets.ImageNotification",
+      code_sign_identity: "Apple Distribution",
+      targets: ["ImageNotification"]
+    )
+    
+    build_app(
+      workspace: "Runner.xcworkspace",
+      scheme: "production",
+      export_options: {
+        provisioningProfiles: {
+          "com.goodvets" => "match AppStore com.goodvets", # Runner target
+          "com.goodvets.ImageNotification" => "match AppStore com.goodvets.ImageNotification" # ImageNotification target
+        }
+      },
+      verbose: true,
+      xcargs: "-allowProvisioningUpdates"
+    )
+    
+    upload_to_testflight(
+      skip_waiting_for_build_processing: true,
+      api_key_path: "fastlane/store.json",
+      uses_non_exempt_encryption: true
+    )
+  end
+end
+
+desc "Push existing prod build for review"
+lane :release do
+  deliver(
+    app_identifier: "com.goodvets",
+    precheck_include_in_app_purchases: false, # required to use api_key or use normal login
+    api_key_path: "fastlane/store.json",
+    app_version:'1.3.4',
+    build_number: '222', # this build should already be on testflight
+    submit_for_review: true,
+    automatic_release: false,
+    force: true, # Skip HTMl report verification
+    skip_metadata: false,
+    skip_screenshots: true,
+    skip_binary_upload: true,
+    submission_information: "{\"export_compliance_uses_encryption\": false}",
+    app_review_information: {
+      first_name: "Siddhant",
+      last_name: "Parashar",
+      phone_number: "+918707857915",
+      email_address: "siddhant.parashar@goodvets.com",
+      demo_user: "siddhant1249@gmail.com",
+      demo_password: "964967",
+      notes: "minor bug fixes and enhancements are done in handing wellness plans"
+    },
+    release_notes: {
+        'default' => "We update the app regularly to keep making it better for you and your furry friends. Get the latest version for all the available GoodVets features.
+                      In this version we have improved the app usability, a clearer standard of care roadmap for your pet with custom notifications, and faster appointment booking.",
+        'en-GB' => "We update the app regularly to keep making it better for you and your furry friends. Get the latest version for all the available GoodVets features.
+                      In this version we have improved the app usability, a clearer standard of care roadmap for your pet with custom notifications, and faster appointment booking."
+        },
+    promotional_text: {
+      'default' => "Your pet's care simplified.",
+      'en-GB' => "Your pet's care simplified."
+      }
+  )
+end
+
+platform :ios do
+  desc "Push a new prod build for review"
+  lane :upload_and_release do
+    setup_ci if ENV["CI"]
+    match(type: "appstore")
+
+    # Explicitly set code signing settings for main app
+    update_code_signing_settings(
+      use_automatic_signing: false,
+      path: "Runner.xcodeproj",
+      team_id: "625VSFTYM5",
+      bundle_identifier: "com.goodvets",
+      profile_name: "match AppStore com.goodvets",
+      code_sign_identity: "Apple Distribution"
+    )
+
+    # Explicitly set code signing settings for notification extension
+    update_code_signing_settings(
+      use_automatic_signing: false,
+      path: "Runner.xcodeproj",
+      team_id: "625VSFTYM5",
+      bundle_identifier: "com.goodvets.ImageNotification",
+      profile_name: "match AppStore com.goodvets.ImageNotification",
+      code_sign_identity: "Apple Distribution",
+      targets: ["ImageNotification"]
+    )
+
+    build_app(
+      workspace: "Runner.xcworkspace",
+      scheme: "production",
+      export_options: {
+        provisioningProfiles: {
+          "com.goodvets" => "match AppStore com.goodvets", # Runner target
+          "com.goodvets.ImageNotification" => "match AppStore com.goodvets.ImageNotification" # ImageNotification target
+        }
+      },
+      verbose: true,
+      xcargs: "-allowProvisioningUpdates"
+    )
+
+    deliver(
+      app_identifier: "com.goodvets",
+      precheck_include_in_app_purchases: false, # required to use api_key or use normal login
+      api_key_path: "fastlane/store.json",
+      submit_for_review: true,
+      automatic_release: false,
+      force: true, # Skip HTMl report verification
+      skip_metadata: false,
+      skip_screenshots: true,
+      skip_binary_upload: false, # upload new ipa
+      submission_information: "{\"export_compliance_uses_encryption\": false}",
+      app_review_information: {
+        first_name: "Siddhant",
+        last_name: "Parashar",
+        phone_number: "+918707857915",
+        email_address: "siddhant.parashar@goodvets.com",
+        demo_user: "siddhant1249@gmail.com",
+        demo_password: "964967",
+        notes: "Minor bug fixes and enhancements are done in handing wellness plans"
+      },
+      release_notes: {
+        'default' => "We update the app regularly to keep making it better for you and your furry friends. Get the latest version for all the available GoodVets features.
+                      In this version we have improved the app usability, a clearer standard of care roadmap for your pet with custom notifications, and faster appointment booking.",
+        'en-GB' => "We update the app regularly to keep making it better for you and your furry friends. Get the latest version for all the available GoodVets features.
+                      In this version we have improved the app usability, a clearer standard of care roadmap for your pet with custom notifications, and faster appointment booking."
+        },
+      promotional_text: {
+        'default' => "Your pet's care simplified.",
+        'en-GB' => "Your pet's care simplified."
+        }
+    )
+  end
+end
